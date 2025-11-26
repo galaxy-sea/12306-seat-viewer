@@ -1,0 +1,47 @@
+{
+  "manifest_version": 3,
+  "name": "12306 车次座位查看",
+  "description": "12306 车次座位查看让你避免乘坐二手句的老动车，让你避免花动车的钱乘坐到绿皮的体验",
+  "version": "2025.1106.0",
+  "homepage_url": "https://github.com/changjinwei/12306-seat-viewer",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "12306-seat-viewer@wcj.plus",
+      "data_collection_permissions": {
+        "required":["none"]
+      }
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "64": "icons/icon64.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "12306 Seat Viewer",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "64": "icons/icon64.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://kyfw.12306.cn/otn/leftTicket/init*"
+      ],
+      "js": [
+        "scripts/content-script.js"
+      ],
+      "css": [
+        "styles/content.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
