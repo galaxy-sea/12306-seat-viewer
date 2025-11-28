@@ -1,3 +1,14 @@
+
+
+# 插件安装
+> 点击图标进入插件中心安装
+
+<a href="https://chromewebstore.google.com/detail/jgmpdcecbnbmcfmkiiphgebgbmfjnjbh"><img src="./images/Google_Chrome_icon_(February_2022).svg" width="64" height="64"></a><a href="https://addons.mozilla.org/firefox/addon/12306-seat-viewer/"><img src="./images/Firefox_logo,_2019.svg" width="64" height="64"></a><a href="https://microsoftedge.microsoft.com/addons/detail/kmkdnljedmgognmnjkfmcbkhbbfhkmpc"><img src="./images/Microsoft_Edge_logo_(2019).svg" width="64" height="64"></a>
+
+[![Chrome Web Store Version](https://img.shields.io/chrome-web-store/v/jgmpdcecbnbmcfmkiiphgebgbmfjnjbh?style=flat-square)](https://chromewebstore.google.com/detail/jgmpdcecbnbmcfmkiiphgebgbmfjnjbh)
+[![Mozilla Add-on Version](https://img.shields.io/amo/v/12306-seat-viewer?style=flat-square)](https://addons.mozilla.org/firefox/addon/12306-seat-viewer/)
+[![Edge Add-on Version](https://img.shields.io/badge/dynamic/json?label=edge%20add-on&prefix=v&query=%24.version&url=https%3A%2F%2Fmicrosoftedge.microsoft.com%2Faddons%2Fgetproductdetailsbycrxid%2Fkmkdnljedmgognmnjkfmcbkhbbfhkmpc&style=flat-square)](https://microsoftedge.microsoft.com/addons/detail/kmkdnljedmgognmnjkfmcbkhbbfhkmpc)
+
 # 12306-seat-viewer
 列车局属与动车席位图鉴
 
