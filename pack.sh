@@ -19,6 +19,10 @@ FILES=(
   icons/icon128.png
 )
 
+VERSION=$(date +%y.%-m%d.1%H%M)
+
+sed -i '' "s/\"version\": *\"[0-9\.]*\"/\"version\": \"$VERSION\"/" "manifest.json"
+
 echo "Packing files into ${OUTPUT_ZIP} ..."
 
 zip -r "$OUTPUT_ZIP" "${FILES[@]}"
