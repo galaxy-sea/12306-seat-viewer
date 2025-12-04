@@ -47,6 +47,19 @@
     return rawText;
   };
 
+  const ensureAnchorStyle = (tr) => {
+    const anchor =
+      tr.querySelector('[id^="train_num_"] > div.train > div > a') ||
+      tr.querySelector(".train > div > a");
+    if (!anchor) return;
+    const style = anchor.getAttribute("style") || "";
+    const needsHeight = !/height\s*:/.test(style);
+    const needsLineHeight = !/line-height\s*:/.test(style);
+    if (!needsHeight && !needsLineHeight) return;
+    const merged = `${style}${needsHeight ? "height: 18px;" : ""}${needsLineHeight ? "line-height: 18px;" : ""}`;
+    anchor.setAttribute("style", merged.trim());
+  };
+
   const fetchTrainMeta = (trainCode) => {
     if (!trainCode || trainCode === "未知") return Promise.resolve(null);
     if (metaCache.has(trainCode)) return Promise.resolve(metaCache.get(trainCode));
@@ -67,9 +80,11 @@
         if (!response.ok) throw new Error("Request failed");
         const data = await response.json();
         const bureauName = data?.content?.data?.bureauName || null;
+        const deptName = data?.content?.data?.deptName || null;
         const carType = data?.content?.data?.carInfo?.carType || null;
         const trainStyle = data?.content?.data?.carInfo?.trainStyle || null;
-        const meta = { bureauName, carType, trainStyle };
+        const perHourSpeed = data?.content?.data?.carInfo?.perHourSpeed ?? null;
+        const meta = { bureauName, deptName, carType, trainStyle, perHourSpeed };
         metaCache.set(trainCode, meta);
         return meta;
       })
@@ -128,11 +143,53 @@
     return request;
   };
 
+  const bureauMap = {
+    哈尔滨局: "哈",
+    沈阳局: "沈",
+    北京局: "京",
+    呼和浩特局: "呼",
+    太原局: "太",
+    上海局: "上",
+    济南局: "济",
+    南昌局: "南",
+    广州局: "广",
+    南宁局: "宁",
+    武汉局: "武",
+    郑州局: "郑",
+    成都局: "成",
+    昆明局: "昆",
+    青藏: "青",
+    兰州局: "兰",
+    乌鲁木齐局: "乌",
+    西安局: "西"
+  };
+
+  const applyBureauBadge = (tr, metaInfo) => {
+    if (!metaInfo?.bureauName) return;
+    const container = tr.querySelector(".train-type");
+    if (!container) return;
+
+    const shortName = bureauMap[metaInfo.bureauName] || metaInfo.bureauName;
+
+    let badge = container.querySelector("[data-sv-bureau='1']");
+    if (!badge) {
+      badge = document.createElement("div");
+      badge.className = "train-type-item item-ju";
+      badge.dataset.svBureau = "1";
+      container.appendChild(badge);
+    }
+    badge.textContent = shortName;
+    badge.title = metaInfo.bureauName;
+  };
+
   const renderTooltip = (trainCode, metaInfo, seatPics) => {
     const safeTrain = escapeHtml(trainCode);
     const metaParts = [`<span class="sv-meta-item"><strong>车次:</strong> ${safeTrain}</span>`];
-    if (metaInfo?.bureauName) {
-      metaParts.push(`<span class="sv-meta-item"><strong>局属:</strong> ${escapeHtml(metaInfo.bureauName)}</span>`);
+    if (metaInfo?.bureauName || metaInfo?.deptName) {
+      metaParts.push(`<span class="sv-meta-item"><strong>局属:</strong> ${escapeHtml(metaInfo.bureauName)}-${escapeHtml(metaInfo.deptName)}</span>`);
+    }
+    if (metaInfo?.perHourSpeed) {
+      metaParts.push(`<span class="sv-meta-item"><strong>时速:</strong> ${escapeHtml(metaInfo.perHourSpeed)} </span>`);
     }
     if (metaInfo?.carType) {
       const styleText = metaInfo.trainStyle ? `：${escapeHtml(metaInfo.trainStyle)}` : "";
@@ -177,6 +234,7 @@
   const handleEnter = (event) => {
     const tr = event.currentTarget;
     currentHover = tr;
+    ensureAnchorStyle(tr);
 
     const trainCode = getTrainCode(tr);
     const runningDay = getRunningDay();
@@ -186,11 +244,13 @@
     const seatCached = seatKey && seatCache.has(seatKey) ? seatCache.get(seatKey) : undefined;
 
     tooltip.innerHTML = renderTooltip(trainCode, metaCached || undefined, seatCached || undefined);
+    if (metaCached) applyBureauBadge(tr, metaCached);
     tooltip.style.display = "block";
     setTooltipPosition(event);
 
     if (metaCached === undefined) {
       fetchTrainMeta(trainCode).then((meta) => {
+        applyBureauBadge(tr, meta);
         if (currentHover === tr) {
           tooltip.innerHTML = renderTooltip(trainCode, meta || undefined, seatKey ? seatCache.get(seatKey) || undefined : undefined);
         }

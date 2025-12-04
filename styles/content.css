@@ -63,3 +63,8 @@
   border-radius: 8px;
   background: #0f172a;
 }
+
+.t-list .train-type .train-type-item.item-ju {
+  border: 1px solid #c084fc;
+  color: #7c3aed;
+}

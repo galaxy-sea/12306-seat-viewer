@@ -19,7 +19,7 @@ FILES=(
   icons/icon128.png
 )
 
-VERSION=$(date +%y.%-m%d.1%H%M)
+VERSION=$(date +%Y.%-m%d.1%H%M)
 
 sed -i '' "s/\"version\": *\"[0-9\.]*\"/\"version\": \"$VERSION\"/" "manifest.json"
 
