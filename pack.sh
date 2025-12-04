@@ -12,6 +12,7 @@ FILES=(
   styles/content.css
   styles/popup.css
   scripts/content-script.js
+  scripts/popup.js
   icons/icon16.png
   icons/icon32.png
   icons/icon48.png
