@@ -18,6 +18,9 @@ FILES=(
   icons/icon48.png
   icons/icon64.png
   icons/icon128.png
+  images/AliPay.png
+  images/WeChatPay.png
+
 )
 
 VERSION=$(date +%Y.%-m%d.1%H%M)

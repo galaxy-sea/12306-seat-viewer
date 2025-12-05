@@ -25,6 +25,8 @@ header {
 
 .actions {
   margin: 12px 0;
+  display: grid;
+  gap: 10px;
 }
 
 .actions button {
@@ -98,4 +100,43 @@ header {
 .tips li {
   margin-bottom: 4px;
   line-height: 1.4;
+}
+
+.payments {
+  margin-top: 14px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.payments img {
+  width: 48%;
+  display: block;
+  border-radius: 8px;
+  background: #fff;
+  padding: 6px;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+}
+
+.payments-note {
+  width: 100%;
+  text-align: center;
+  margin-top: 8px;
+  color: #e0f2fe;
+  font-size: 13px;
+  font-weight: 700;
+  text-shadow:
+    0 0 6px rgba(255, 255, 255, 0.6),
+    0 0 12px rgba(94, 234, 212, 0.7),
+    0 0 18px rgba(59, 130, 246, 0.7);
+  animation: neon-cycle 2.4s linear infinite;
+}
+
+@keyframes neon-cycle {
+  0% { color: #e0f2fe; text-shadow: 0 0 6px rgba(255,255,255,0.6), 0 0 12px rgba(94,234,212,0.7), 0 0 18px rgba(59,130,246,0.7); }
+  25% { color: #fca5a5; text-shadow: 0 0 6px rgba(255,255,255,0.6), 0 0 12px rgba(248,113,113,0.7), 0 0 18px rgba(251,191,36,0.7); }
+  50% { color: #a5b4fc; text-shadow: 0 0 6px rgba(255,255,255,0.6), 0 0 12px rgba(129,140,248,0.7), 0 0 18px rgba(99,102,241,0.7); }
+  75% { color: #f9a8d4; text-shadow: 0 0 6px rgba(255,255,255,0.6), 0 0 12px rgba(244,114,182,0.7), 0 0 18px rgba(236,72,153,0.7); }
+  100% { color: #e0f2fe; text-shadow: 0 0 6px rgba(255,255,255,0.6), 0 0 12px rgba(94,234,212,0.7), 0 0 18px rgba(59,130,246,0.7); }
 }
