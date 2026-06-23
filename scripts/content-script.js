@@ -19,13 +19,20 @@
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#39;");
 
-  const getTrainCode = (tr) => {
-    const anchor =
-      tr.querySelector('[id^="train_num_"] > div.train > div > a') ||
-      tr.querySelector(".train > div > a");
-    if (!anchor) return "未知";
+  const getTrainAnchor = (tr) =>
+    tr.querySelector('[id^="train_num_"] > div.train > div > a') ||
+    tr.querySelector(".train > div > a");
 
-    const rawText = anchor.textContent?.trim() || "未知";
+  const getRawTrainCode = (tr) => {
+    const anchor = getTrainAnchor(tr);
+    return anchor?.textContent?.trim() || "";
+  };
+
+  const getTrainCode = (tr) => {
+    const anchor = getTrainAnchor(tr);
+    if (!anchor) return "";
+
+    const rawText = getRawTrainCode(tr);
     const onclick = anchor.getAttribute("onclick") || "";
 
     if (!onclick || onclick.includes(rawText)) {
@@ -61,43 +68,76 @@
     anchor.setAttribute("style", merged.trim());
   };
 
-  const fetchTrainMeta = (trainCode) => {
-    if (!trainCode || trainCode === "未知") return Promise.resolve(null);
-    if (metaCache.has(trainCode)) return Promise.resolve(metaCache.get(trainCode));
-    if (metaRequests.has(trainCode)) return metaRequests.get(trainCode);
+  const fetchTrainMeta = (trainCode, rawTrainCode = trainCode) => {
+    if (!trainCode) return Promise.resolve(null);
+    const queryDate = getRunningDay();
+    if (!queryDate) return Promise.resolve(null);
+    const bureauTrainCode = rawTrainCode || trainCode;
 
-    const url = `https://kyfw.12306.cn/wxxcx/openplatform-inner/miniprogram/wifiapps/appFrontEnd/v2/lounge/open-smooth-common/qrCode/getDeptByTrainCode?trainCode=${encodeURIComponent(
-      trainCode
-    )}&reqType=form`;
+    const key = `${queryDate}|${trainCode}`;
+    if (metaCache.has(key)) return Promise.resolve(metaCache.get(key));
+    if (metaRequests.has(key)) return metaRequests.get(key);
 
-    const request = fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"
-      },
-      body: ""
-    })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("Request failed");
-        const data = await response.json();
-        const bureauName = data?.content?.data?.bureauName || null;
-        const deptName = data?.content?.data?.deptName || null;
-        const carType = data?.content?.data?.carInfo?.carType || null;
-        const trainStyle = data?.content?.data?.carInfo?.trainStyle || null;
-        const perHourSpeed = data?.content?.data?.carInfo?.perHourSpeed ?? null;
-        const meta = { bureauName, deptName, carType, trainStyle, perHourSpeed };
-        metaCache.set(trainCode, meta);
+    const fetchDeptMeta = async () => {
+      const url = `https://kyfw.12306.cn/wxxcx/openplatform-inner/miniprogram/wifiapps/appFrontEnd/v2/lounge/open-smooth-common/qrCode/getDeptByTrainCode?trainCode=${encodeURIComponent(
+        trainCode
+      )}&reqType=form`;
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"
+        },
+        body: ""
+      });
+      if (!response.ok) throw new Error("Request failed");
+
+      const data = await response.json();
+      const bureauName = data?.content?.data?.bureauName || null;
+      const deptName = data?.content?.data?.deptName || null;
+      const carType = data?.content?.data?.carInfo?.carType || null;
+      const trainStyle = data?.content?.data?.carInfo?.trainStyle || null;
+      const perHourSpeed = data?.content?.data?.carInfo?.perHourSpeed ?? null;
+      return { bureauName, deptName, carType, trainStyle, perHourSpeed };
+    };
+
+    const fetchBureauMeta = async (bureauTrainCode) => {
+      const url = `https://kyfw.12306.cn/wxxcx/wechat/bigScreen/queryTrainBureau?queryDate=${encodeURIComponent(
+        queryDate
+      )}&trainCode=${encodeURIComponent(
+        bureauTrainCode
+      )}`;
+
+      const response = await fetch(url, {
+        method: "GET"
+      });
+      if (!response.ok) throw new Error("Request failed");
+
+      const data = await response.json();
+      const bureauName = data?.data?.bureau_code_name || null;
+      const bureauCode = data?.data?.bureau_code || null;
+      return { bureauName, bureauCode };
+    };
+
+    const request = fetchDeptMeta()
+      .then(async (meta) => {
+        if (meta?.bureauName) return meta;
+        return fetchBureauMeta(bureauTrainCode);
+      })
+      .catch(() => fetchBureauMeta(bureauTrainCode))
+      .then((meta) => {
+        metaCache.set(key, meta);
         return meta;
       })
       .catch(() => {
-        metaCache.set(trainCode, null);
+        metaCache.set(key, null);
         return null;
       })
       .finally(() => {
-        metaRequests.delete(trainCode);
+        metaRequests.delete(key);
       });
 
-    metaRequests.set(trainCode, request);
+    metaRequests.set(key, request);
     return request;
   };
 
@@ -110,7 +150,7 @@
   };
 
   const fetchSeatPics = (trainCode, runningDay) => {
-    if (!trainCode || trainCode === "未知" || !runningDay) {
+    if (!trainCode || !runningDay) {
       return Promise.resolve(null);
     }
 
@@ -145,24 +185,46 @@
   };
 
   const bureauMap = {
+    哈尔滨: "哈",
     哈尔滨局: "哈",
+    沈阳: "沈",
     沈阳局: "沈",
+    北京: "京",
     北京局: "京",
+    呼和浩特: "呼",
     呼和浩特局: "呼",
+    太原: "太",
     太原局: "太",
+    上海: "上",
     上海局: "上",
+    济南: "济",
     济南局: "济",
+    南昌: "南",
     南昌局: "南",
+    广州: "广",
     广州局: "广",
+    南宁: "宁",
     南宁局: "宁",
+    武汉: "武",
     武汉局: "武",
+    郑州: "郑",
     郑州局: "郑",
+    成都: "成",
     成都局: "成",
+    昆明: "昆",
     昆明局: "昆",
     青藏: "青",
+    兰州: "兰",
     兰州局: "兰",
+    乌鲁木齐: "乌",
     乌鲁木齐局: "乌",
+    西安: "西",
     西安局: "西"
+  };
+
+  const getMetaCacheKey = (trainCode) => {
+    const queryDate = getRunningDay();
+    return queryDate && trainCode ? `${queryDate}|${trainCode}` : null;
   };
 
   const applyBureauBadge = (tr, metaInfo) => {
@@ -185,14 +247,16 @@
 
   const applyVisibleBureauBadge = (tr) => {
     const trainCode = getTrainCode(tr);
-    if (!trainCode || trainCode === "未知") return;
+    const rawTrainCode = getRawTrainCode(tr);
+    if (!trainCode) return;
 
-    if (metaCache.has(trainCode)) {
-      applyBureauBadge(tr, metaCache.get(trainCode));
+    const key = getMetaCacheKey(trainCode);
+    if (key && metaCache.has(key)) {
+      applyBureauBadge(tr, metaCache.get(key));
       return;
     }
 
-    fetchTrainMeta(trainCode).then((meta) => {
+    fetchTrainMeta(trainCode, rawTrainCode).then((meta) => {
       applyBureauBadge(tr, meta);
     });
   };
@@ -301,7 +365,8 @@
     const safeTrain = escapeHtml(trainCode);
     const metaParts = [`<span class="sv-meta-item"><strong>车次:</strong> ${safeTrain}</span>`];
     if (metaInfo?.bureauName || metaInfo?.deptName) {
-      metaParts.push(`<span class="sv-meta-item"><strong>局属:</strong> ${escapeHtml(metaInfo.bureauName)}-${escapeHtml(metaInfo.deptName)}</span>`);
+      const bureauText = [metaInfo.bureauName, metaInfo.deptName].filter(Boolean).join("-");
+      metaParts.push(`<span class="sv-meta-item"><strong>局属:</strong> ${escapeHtml(bureauText)}</span>`);
     }
     if (metaInfo?.perHourSpeed) {
       metaParts.push(`<span class="sv-meta-item"><strong>时速:</strong> ${escapeHtml(metaInfo.perHourSpeed)} </span>`);
@@ -364,9 +429,11 @@
     ensureAnchorStyle(tr);
 
     const trainCode = getTrainCode(tr);
+    const rawTrainCode = getRawTrainCode(tr);
     const runningDay = getRunningDay();
 
-    const metaCached = metaCache.has(trainCode) ? metaCache.get(trainCode) : undefined;
+    const metaKey = getMetaCacheKey(trainCode);
+    const metaCached = metaKey && metaCache.has(metaKey) ? metaCache.get(metaKey) : undefined;
     const seatKey = runningDay ? `${trainCode}|${runningDay}` : null;
     const seatCached = seatKey && seatCache.has(seatKey) ? seatCache.get(seatKey) : undefined;
 
@@ -377,7 +444,7 @@
     scheduleTooltipPosition(tr);
 
     if (metaCached === undefined) {
-      fetchTrainMeta(trainCode).then((meta) => {
+      fetchTrainMeta(trainCode, rawTrainCode).then((meta) => {
         applyBureauBadge(tr, meta);
         if (currentHover === tr) {
           tooltip.innerHTML = renderTooltip(trainCode, meta || undefined, seatKey ? seatCache.get(seatKey) || undefined : undefined);
@@ -389,7 +456,7 @@
     if (runningDay && seatCached === undefined) {
       fetchSeatPics(trainCode, runningDay).then((pics) => {
         if (currentHover === tr) {
-          const meta = metaCache.has(trainCode) ? metaCache.get(trainCode) : undefined;
+          const meta = metaKey && metaCache.has(metaKey) ? metaCache.get(metaKey) : undefined;
           tooltip.innerHTML = renderTooltip(trainCode, meta || undefined, pics || undefined);
           scheduleTooltipPosition(tr);
         }
