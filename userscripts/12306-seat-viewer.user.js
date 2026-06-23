@@ -4,7 +4,7 @@
 // @author       ChangJin Wei (魏昌进)
 // @website      https://wcj.plus/
 // @namespace    https://github.com/galaxy-sea/12306-seat-viewer
-// @version      2026.624.10027
+// @version      2026.624.10041
 // @description  12306 车次座位查看让你避免乘坐二手句的老动车，让你避免花动车的钱乘坐到绿皮的体验
 // @description:zh-CN 12306 车次座位查看让你避免乘坐二手句的老动车，让你避免花动车的钱乘坐到绿皮的体验
 // @license      Apache-2.0
