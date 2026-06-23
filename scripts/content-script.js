@@ -237,6 +237,29 @@
     observeVisibleRow.observer.observe(tr);
   };
 
+  const scanVisibleBureauRows = () => {
+    const tbody = document.getElementById("queryLeftTable");
+    if (!tbody) return;
+
+    findRows(tbody).forEach((tr) => {
+      if (!isNearViewport(tr)) return;
+      if (tr.querySelector("[data-sv-bureau='1']")) return;
+
+      applyVisibleBureauBadge(tr);
+    });
+  };
+
+  const scheduleVisibleBureauScan = (() => {
+    let timer = null;
+    return () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        scanVisibleBureauRows();
+        timer = null;
+      }, 80);
+    };
+  })();
+
   const getPriceFromTicketCell = (ticketCell) => {
     const label = ticketCell.getAttribute("aria-label") || "";
     const match = label.match(/票价\s*([0-9]+(?:\.[0-9]+)?)\s*元/);
@@ -424,6 +447,7 @@
     if (!rows.length) return;
 
     bindRows(rows);
+    scanVisibleBureauRows();
   };
 
   const observeTable = () => {
@@ -477,10 +501,18 @@
     });
   };
 
+  const observeScroll = () => {
+    if (observeScroll.bound) return;
+    observeScroll.bound = true;
+    window.addEventListener("scroll", scheduleVisibleBureauScan, { passive: true, capture: true });
+    window.addEventListener("resize", scheduleVisibleBureauScan, { passive: true });
+  };
+
   const start = () => {
     init();
     observeTable();
     observeRoot();
+    observeScroll();
   };
 
   if (document.readyState === "loading") {
