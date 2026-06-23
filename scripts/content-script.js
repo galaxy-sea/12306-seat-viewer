@@ -330,7 +330,40 @@
     return match ? `¥${match[1]}` : "";
   };
 
-  const setPriceBadge = (ticketCell, priceText) => {
+  const seatTypeMap = {
+    SWZ: "9",
+    ZY: "M",
+    ZE: "O",
+    WZ: "W"
+  };
+
+  const getSeatTypeCode = (ticketCell) => {
+    const seatKey = ticketCell.id?.split("_")[0] || "";
+    return seatTypeMap[seatKey] || "";
+  };
+
+  const getDiscountMap = (ticketRow) => {
+    const raw = ticketRow.getAttribute("seat_discount_info") || "";
+    const discounts = new Map();
+    raw.replace(/([A-Z0-9])(\d{4})/g, (_, seatTypeCode, discountCode) => {
+      const discountValue = Number(discountCode) / 10;
+      if (discountValue > 0) {
+        const discountText = Number.isInteger(discountValue)
+          ? `${discountValue}`
+          : discountValue.toFixed(1);
+        discounts.set(seatTypeCode, discountText);
+      }
+      return "";
+    });
+    return discounts;
+  };
+
+  const getDiscountFromTicketCell = (ticketCell, discountMap) => {
+    const seatTypeCode = getSeatTypeCode(ticketCell);
+    return seatTypeCode ? discountMap.get(seatTypeCode) || "" : "";
+  };
+
+  const setPriceBadge = (ticketCell, priceText, discountText = "") => {
     let priceBadge = ticketCell.querySelector(":scope > .sv-price");
     if (!priceText || !priceText.includes("¥")) {
       priceBadge?.remove();
@@ -342,17 +375,25 @@
       priceBadge.className = "sv-price";
       ticketCell.appendChild(priceBadge);
     }
-    if (priceBadge.textContent !== priceText) {
-      priceBadge.textContent = priceText;
+    const html = discountText
+      ? `${escapeHtml(priceText)} <span style="color:grey;">${escapeHtml(discountText)}</span>`
+      : escapeHtml(priceText);
+    if (priceBadge.innerHTML !== html) {
+      priceBadge.innerHTML = html;
     }
   };
 
   const syncTicketCellPrices = (tbody) => {
     tbody.querySelectorAll('tr[id^="ticket_"]').forEach((ticketRow) => {
+      const discountMap = getDiscountMap(ticketRow);
       Array.from(ticketRow.children)
         .filter((cell) => cell.tagName === "TD")
         .forEach((ticketCell) => {
-          setPriceBadge(ticketCell, getPriceFromTicketCell(ticketCell));
+          setPriceBadge(
+            ticketCell,
+            getPriceFromTicketCell(ticketCell),
+            getDiscountFromTicketCell(ticketCell, discountMap)
+          );
         });
     });
   };

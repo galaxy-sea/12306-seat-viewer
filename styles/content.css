@@ -79,5 +79,5 @@
 }
 
 .t-list tr[id^="price_"] {
-  display: none !important;
+  /*display: none !important;*/
 }
