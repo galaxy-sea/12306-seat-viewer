@@ -9,6 +9,7 @@
   const seatCache = new Map();
   const seatRequests = new Map();
   let currentHover = null;
+  let currentTooltipPoint = null;
 
   const escapeHtml = (value) =>
     String(value || "")
@@ -182,6 +183,43 @@
     badge.title = metaInfo.bureauName;
   };
 
+  const getPriceFromTicketCell = (ticketCell) => {
+    const label = ticketCell.getAttribute("aria-label") || "";
+    const match = label.match(/票价\s*([0-9]+(?:\.[0-9]+)?)\s*元/);
+    return match ? `¥${match[1]}` : "";
+  };
+
+  const setPriceBadge = (ticketCell, priceText) => {
+    let priceBadge = ticketCell.querySelector(":scope > .sv-price");
+    if (!priceText || !priceText.includes("¥")) {
+      priceBadge?.remove();
+      return;
+    }
+
+    if (!priceBadge) {
+      priceBadge = document.createElement("div");
+      priceBadge.className = "sv-price";
+      ticketCell.appendChild(priceBadge);
+    }
+    if (priceBadge.textContent !== priceText) {
+      priceBadge.textContent = priceText;
+    }
+  };
+
+  const syncTicketCellPrices = (tbody) => {
+    tbody.querySelectorAll('tr[id^="ticket_"]').forEach((ticketRow) => {
+      Array.from(ticketRow.children)
+        .filter((cell) => cell.tagName === "TD")
+        .forEach((ticketCell) => {
+          setPriceBadge(ticketCell, getPriceFromTicketCell(ticketCell));
+        });
+    });
+  };
+
+  const syncPrices = (tbody) => {
+    syncTicketCellPrices(tbody);
+  };
+
   const renderTooltip = (trainCode, metaInfo, seatPics) => {
     const safeTrain = escapeHtml(trainCode);
     const metaParts = [`<span class="sv-meta-item"><strong>车次:</strong> ${safeTrain}</span>`];
@@ -221,19 +259,31 @@
     return parts.join("");
   };
 
-  const setTooltipPosition = (event) => {
-    const offset = 12;
+  const setTooltipPosition = (point) => {
+    const offsetY = 30;
     const maxLeft = window.innerWidth - tooltip.offsetWidth - 8;
-    const maxTop = window.innerHeight - tooltip.offsetHeight - 8;
-    const left = Math.min(maxLeft, event.clientX + offset);
-    const top = Math.min(maxTop, event.clientY + offset);
+    const maxTop = window.innerHeight - tooltip.offsetHeight - offsetY;
+    const centeredLeft = (window.innerWidth - tooltip.offsetWidth) / 2;
+    const left = Math.max(8, Math.min(maxLeft, centeredLeft));
+    const belowTop = point.clientY + offsetY;
+    const aboveTop = point.clientY - tooltip.offsetHeight - offsetY;
+    const top = belowTop <= maxTop ? belowTop : Math.max(8, aboveTop);
     tooltip.style.left = `${left}px`;
     tooltip.style.top = `${top}px`;
+  };
+
+  const scheduleTooltipPosition = (tr) => {
+    requestAnimationFrame(() => {
+      if (currentHover !== tr || !currentTooltipPoint) return;
+      setTooltipPosition(currentTooltipPoint);
+      tooltip.style.visibility = "visible";
+    });
   };
 
   const handleEnter = (event) => {
     const tr = event.currentTarget;
     currentHover = tr;
+    currentTooltipPoint = { clientY: event.clientY };
     ensureAnchorStyle(tr);
 
     const trainCode = getTrainCode(tr);
@@ -245,14 +295,16 @@
 
     tooltip.innerHTML = renderTooltip(trainCode, metaCached || undefined, seatCached || undefined);
     if (metaCached) applyBureauBadge(tr, metaCached);
+    tooltip.style.visibility = "hidden";
     tooltip.style.display = "block";
-    setTooltipPosition(event);
+    scheduleTooltipPosition(tr);
 
     if (metaCached === undefined) {
       fetchTrainMeta(trainCode).then((meta) => {
         applyBureauBadge(tr, meta);
         if (currentHover === tr) {
           tooltip.innerHTML = renderTooltip(trainCode, meta || undefined, seatKey ? seatCache.get(seatKey) || undefined : undefined);
+          scheduleTooltipPosition(tr);
         }
       });
     }
@@ -262,6 +314,7 @@
         if (currentHover === tr) {
           const meta = metaCache.has(trainCode) ? metaCache.get(trainCode) : undefined;
           tooltip.innerHTML = renderTooltip(trainCode, meta || undefined, pics || undefined);
+          scheduleTooltipPosition(tr);
         }
       });
     }
@@ -269,12 +322,9 @@
 
   const handleLeave = () => {
     tooltip.style.display = "none";
+    tooltip.style.visibility = "hidden";
     currentHover = null;
-  };
-
-  const handleMove = (event) => {
-    if (tooltip.style.display !== "block") return;
-    setTooltipPosition(event);
+    currentTooltipPoint = null;
   };
 
   const bindRows = (rows) => {
@@ -283,12 +333,12 @@
       tr.dataset.svBound = "1";
       tr.addEventListener("mouseenter", handleEnter, { passive: true });
       tr.addEventListener("mouseleave", handleLeave, { passive: true });
-      tr.addEventListener("mousemove", handleMove, { passive: true });
     });
   };
 
   const findRows = (tbody) =>
     Array.from(tbody.querySelectorAll("tr")).filter((tr) => {
+      if (tr.id?.startsWith("price_")) return false;
       const hasCells = tr.querySelectorAll("td").length > 0;
       const text = tr.innerText.trim();
       return hasCells && text.length > 0;
@@ -301,6 +351,8 @@
 
     const dateValue = dateInput.value?.trim();
     if (!dateValue) return;
+
+    syncPrices(tbody);
 
     const rows = findRows(tbody);
     if (!rows.length) return;
@@ -324,7 +376,12 @@
     observeTable.observer = new MutationObserver(() => {
       scheduleInit();
     });
-    observeTable.observer.observe(tbody, { childList: true, subtree: true });
+    observeTable.observer.observe(tbody, {
+      attributes: true,
+      attributeFilter: ["style", "class"],
+      childList: true,
+      subtree: true
+    });
   };
 
   const scheduleInit = (() => {
