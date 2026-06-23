@@ -183,6 +183,60 @@
     badge.title = metaInfo.bureauName;
   };
 
+  const applyVisibleBureauBadge = (tr) => {
+    const trainCode = getTrainCode(tr);
+    if (!trainCode || trainCode === "未知") return;
+
+    if (metaCache.has(trainCode)) {
+      applyBureauBadge(tr, metaCache.get(trainCode));
+      return;
+    }
+
+    fetchTrainMeta(trainCode).then((meta) => {
+      applyBureauBadge(tr, meta);
+    });
+  };
+
+  const isNearViewport = (element) => {
+    const margin = 120;
+    const rect = element.getBoundingClientRect();
+    return rect.bottom >= -margin && rect.top <= window.innerHeight + margin;
+  };
+
+  const observeVisibleRow = (tr) => {
+    if (tr.dataset.svBureauObserved === "1") return;
+    tr.dataset.svBureauObserved = "1";
+
+    if (isNearViewport(tr)) {
+      applyVisibleBureauBadge(tr);
+      return;
+    }
+
+    if (!("IntersectionObserver" in window)) {
+      applyVisibleBureauBadge(tr);
+      return;
+    }
+
+    if (!observeVisibleRow.observer) {
+      observeVisibleRow.observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (!entry.isIntersecting) return;
+            observeVisibleRow.observer.unobserve(entry.target);
+            applyVisibleBureauBadge(entry.target);
+          });
+        },
+        {
+          root: null,
+          rootMargin: "120px 0px",
+          threshold: 0.01
+        }
+      );
+    }
+
+    observeVisibleRow.observer.observe(tr);
+  };
+
   const getPriceFromTicketCell = (ticketCell) => {
     const label = ticketCell.getAttribute("aria-label") || "";
     const match = label.match(/票价\s*([0-9]+(?:\.[0-9]+)?)\s*元/);
@@ -327,12 +381,24 @@
     currentTooltipPoint = null;
   };
 
+  const handleMove = (event) => {
+    const tr = event.currentTarget;
+    if (currentHover !== tr || tooltip.style.display !== "block") return;
+
+    currentTooltipPoint = { clientY: event.clientY };
+    scheduleTooltipPosition(tr);
+  };
+
   const bindRows = (rows) => {
     rows.forEach((tr) => {
-      if (tr.dataset.svBound === "1") return;
-      tr.dataset.svBound = "1";
-      tr.addEventListener("mouseenter", handleEnter, { passive: true });
-      tr.addEventListener("mouseleave", handleLeave, { passive: true });
+      observeVisibleRow(tr);
+
+      if (tr.dataset.svBound !== "1") {
+        tr.dataset.svBound = "1";
+        tr.addEventListener("mouseenter", handleEnter, { passive: true });
+        tr.addEventListener("mouseleave", handleLeave, { passive: true });
+        tr.addEventListener("mousemove", handleMove, { passive: true });
+      }
     });
   };
 
@@ -370,6 +436,10 @@
 
     if (observeTable.observer && observeTable.currentTbody) {
       observeTable.observer.disconnect();
+    }
+    if (observeVisibleRow.observer) {
+      observeVisibleRow.observer.disconnect();
+      observeVisibleRow.observer = null;
     }
 
     observeTable.currentTbody = tbody;
