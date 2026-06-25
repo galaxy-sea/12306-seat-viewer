@@ -86,7 +86,7 @@
     <p>
       <label>
         车次号
-        <input id="trainNumberInput" type="text" autocomplete="off" inputmode="none" readonly placeholder="例如 G1、D3123">
+        <input id="trainNumberInput" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" inputmode="latin" readonly placeholder="例如 G1、D3123">
       </label>
       <div id="trainOptionList" hidden></div>
     </p>
@@ -130,9 +130,9 @@
   </main>
 
   <script>
-    const searchEndpoint = "https://search.12306.cn/search/v1/train/search";
-    const metaEndpoint = "https://kyfw.12306.cn/otn/queryTrainInfo/query";
-    const detailEndpoint = "https://kyfw.12306.cn/wxxcx/openplatform-inner/miniprogram/wifiapps/appFrontEnd/v2/lounge/open-smooth-common/trainStyleBatch/getCarDetail";
+    const searchEndpoint = "https://kyfw12306-api-proxy.wcj.plus/search/v1/train/search";
+    const metaEndpoint = "https://kyfw12306-api-proxy.wcj.plus/otn/queryTrainInfo/query";
+    const detailEndpoint = "https://kyfw12306-api-proxy.wcj.plus/wxxcx/openplatform-inner/miniprogram/wifiapps/appFrontEnd/v2/lounge/open-smooth-common/trainStyleBatch/getCarDetail";
     const imagePrefix = "https://wifi.12306.cn/resourcecenter/cateringimages/";
 
     const dateInput = document.getElementById("dateInput");
@@ -150,6 +150,8 @@
 
     let searchTimer = null;
     let searchAbort = null;
+    let searchInFlightKey = "";
+    let searchInFlightPromise = null;
     let selectedItem = null;
     let searchResults = [];
     let searchResultsKeyword = "";
@@ -174,6 +176,10 @@
 
     const getKeyword = () => {
       return trainNumberInput.value.trim();
+    };
+
+    const normalizeTrainNumber = (value) => {
+      return value.replace(/[^a-z0-9]/gi, "").toUpperCase();
     };
 
     const setStatus = (text) => {
@@ -206,6 +212,12 @@
     const searchTrains = async () => {
       const keyword = getKeyword();
       const date = dateInput.value;
+      const searchKey = `${date}|${keyword.toUpperCase()}`;
+
+      if (searchInFlightPromise && searchInFlightKey === searchKey) {
+        return searchInFlightPromise;
+      }
+
       selectedItem = null;
       resultPanel.hidden = true;
       clearSuggestions();
@@ -221,19 +233,29 @@
       setStatus("正在查询车次...");
       const url = `${searchEndpoint}?keyword=${encodeURIComponent(keyword)}&date=${encodeURIComponent(toApiDate(date))}`;
 
-      try {
-        const response = await fetch(url, { signal: searchAbort.signal });
-        if (!response.ok) throw new Error("Search failed");
-        const data = await response.json();
-        const results = dedupeByTrainCode(Array.isArray(data?.data) ? data.data : []);
-        renderSuggestions(results);
-        setStatus(results.length ? "" : "没有匹配车次");
-        return results;
-      } catch (error) {
-        if (error.name === "AbortError") return [];
-        setStatus("查询失败，请稍后重试");
-        return [];
-      }
+      searchInFlightKey = searchKey;
+      searchInFlightPromise = (async () => {
+        try {
+          const response = await fetch(url, { signal: searchAbort.signal });
+          if (!response.ok) throw new Error("Search failed");
+          const data = await response.json();
+          const results = dedupeByTrainCode(Array.isArray(data?.data) ? data.data : []);
+          renderSuggestions(results);
+          setStatus(results.length ? "" : "没有匹配车次");
+          return results;
+        } catch (error) {
+          if (error.name === "AbortError") return [];
+          setStatus("查询失败，请稍后重试");
+          return [];
+        } finally {
+          if (searchInFlightKey === searchKey) {
+            searchInFlightKey = "";
+            searchInFlightPromise = null;
+          }
+        }
+      })();
+
+      return searchInFlightPromise;
     };
 
     const scheduleSearch = () => {
@@ -252,13 +274,13 @@
     };
 
     const updateTrainInput = (value) => {
-      trainNumberInput.value = value;
+      trainNumberInput.value = normalizeTrainNumber(value);
       clearSuggestions();
       scheduleSearch();
     };
 
     const appendTrainKey = (key) => {
-      updateTrainInput(`${trainNumberInput.value}${key}`.toUpperCase());
+      updateTrainInput(`${trainNumberInput.value}${key}`);
     };
 
     const backspaceTrainKey = () => {
@@ -280,14 +302,6 @@
       }
     };
 
-    const selectMatchedTrain = () => {
-      const value = trainNumberInput.value.trim().toUpperCase();
-      const item = searchResults.find((result) => result.station_train_code?.toUpperCase() === value);
-      if (item && selectedItem?.station_train_code !== item.station_train_code) {
-        selectTrain(item);
-      }
-    };
-
     const showTrainOptions = () => {
       if (!searchResults.length || searchResultsKeyword !== getKeyword().toUpperCase()) {
         setStatus("没有匹配车次");
@@ -305,8 +319,8 @@
       return Array.from(new Set(rows.map((row) => row.station_train_code).filter(Boolean)));
     };
 
-    const fetchSeatPics = async (trainNo, date) => {
-      const url = `${detailEndpoint}?carCode=&trainCode=${encodeURIComponent(trainNo)}&runningDay=${encodeURIComponent(toApiDate(date))}&reqType=form`;
+    const fetchSeatPics = async (trainCode, date) => {
+      const url = `${detailEndpoint}?carCode=&trainCode=${encodeURIComponent(trainCode)}&runningDay=${encodeURIComponent(toApiDate(date))}&reqType=form`;
       const response = await fetch(url);
       if (!response.ok) throw new Error("Seat detail failed");
       const data = await response.json();
@@ -325,10 +339,9 @@
       galleryStatus.textContent = "正在加载车辆信息和座位图...";
 
       try {
-        const [codes, pics] = await Promise.all([
-          fetchTrainMeta(item.train_no, dateInput.value),
-          fetchSeatPics(item.train_no, dateInput.value)
-        ]);
+        const codes = await fetchTrainMeta(item.train_no, dateInput.value);
+        const detailTrainCode = codes.find((code) => code === item.station_train_code) || codes[0] || item.station_train_code;
+        const pics = await fetchSeatPics(detailTrainCode, dateInput.value);
         renderMetaCodes(codes);
         renderSeatPics(pics);
         galleryStatus.textContent = pics.length ? `共 ${pics.length} 张座位图` : "未找到座位图";
@@ -372,9 +385,13 @@
     trainNumberInput.addEventListener("click", showTrainKeyboard);
     trainNumberInput.addEventListener("focus", showTrainKeyboard);
     trainNumberInput.addEventListener("input", () => {
-      if (!useCustomKeyboard) scheduleSearch();
+      if (useCustomKeyboard) return;
+      const normalizedValue = normalizeTrainNumber(trainNumberInput.value);
+      if (trainNumberInput.value !== normalizedValue) {
+        trainNumberInput.value = normalizedValue;
+      }
+      scheduleSearch();
     });
-    trainNumberInput.addEventListener("change", selectMatchedTrain);
     trainOptionList.addEventListener("click", (event) => {
       const button = event.target.closest("button[data-index]");
       if (!button) return;
