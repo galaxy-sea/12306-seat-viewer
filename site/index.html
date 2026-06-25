@@ -1,5 +1,6 @@
 <!doctype html>
 <html lang="zh-CN">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -52,7 +53,7 @@
       text-align: right;
     }
 
-    #trainKeyboard > div {
+    #trainKeyboard>div {
       display: grid;
       grid-template-columns: repeat(5, 1fr);
       width: 100%;
@@ -86,8 +87,27 @@
       text-align: left;
       overflow-wrap: anywhere;
     }
+
+    .site-footer {
+      text-align: center;
+    }
+
+    .site-footer hr {
+      height: 1px;
+      margin: 16px 0 4px;
+    }
+
+    .site-footer a,
+    .site-footer a:hover,
+    .site-footer a:active,
+    .site-footer a:focus {
+      color: inherit;
+      text-decoration: none;
+      cursor: default;
+    }
   </style>
 </head>
+
 <body>
   <main>
     <h1>12306 动车座位图</h1>
@@ -99,7 +119,8 @@
     <div>
       <label>
         车次号
-        <input id="trainNumberInput" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" inputmode="latin" readonly placeholder="例如 G1、D3123" aria-controls="trainOptionList" aria-expanded="false">
+        <input id="trainNumberInput" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false"
+          inputmode="latin" readonly placeholder="例如 G1、D3123" aria-controls="trainOptionList" aria-expanded="false">
       </label>
       <div id="trainOptionList" role="listbox" hidden></div>
     </div>
@@ -139,7 +160,22 @@
 
       <div id="seatGallery"></div>
     </section>
+
+    <li><a href="https://github.com/galaxy-sea/12306-seat-viewer">12306 车次座位查看：插件支持</a>
+      <ul>
+        <li><a href="https://chromewebstore.google.com/detail/jgmpdcecbnbmcfmkiiphgebgbmfjnjbh">Chrome Web Store</a></li>
+        <li><a href="https://microsoftedge.microsoft.com/addons/detail/kmkdnljedmgognmnjkfmcbkhbbfhkmpc">Microsoft EdgeAdd-ons</a></li>
+        <li><a href="https://addons.mozilla.org/zh-CN/firefox/addon/12306-seat-viewer/">Add-ons for Firefox</a></li>
+        <li><a href="https://greasyfork.org/zh-CN/scripts/584065-12306-%E8%BD%A6%E6%AC%A1%E5%BA%A7%E4%BD%8D%E6%9F%A5%E7%9C%8B">Tampermonkey</a></li>
+      </ul>
+    </li>
   </main>
+
+  <footer class="site-footer">
+    <hr style="margin-bottom: 16px;">
+    <p style="margin-bottom: 0px;"></p>
+    <small>© 2015–present <a href="../">ChangJin Wei (魏昌进)</a></small>
+  </footer>
 
   <script>
     const searchEndpoint = "https://kyfw12306-api-proxy.wcj.plus/search/v1/train/search";
@@ -431,4 +467,5 @@
     });
   </script>
 </body>
+
 </html>
