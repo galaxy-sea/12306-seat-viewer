@@ -7,6 +7,7 @@ set -euo pipefail
 OUTPUT_ZIP="./12306-seat-viewer.zip"
 USERSCRIPT_TEMPLATE="./userscripts/12306-seat-viewer.user.template.js"
 USERSCRIPT_OUTPUT="./userscripts/12306-seat-viewer.user.js"
+SITE_OUTPUT_DIR="../resume/plus.wcj./site/12306"
 
 FILES=(
   manifest.json
@@ -57,6 +58,10 @@ CONTENT_CSS_STRING=$(json_string "./styles/content.css")
 } > "$USERSCRIPT_OUTPUT"
 
 echo "Generated ${USERSCRIPT_OUTPUT}"
+
+mkdir -p "$SITE_OUTPUT_DIR"
+cp "./site/index.html" "$SITE_OUTPUT_DIR/index.html"
+echo "Copied ./site/index.html to ${SITE_OUTPUT_DIR}/index.html"
 
 echo "Packing files into ${OUTPUT_ZIP} ..."
 

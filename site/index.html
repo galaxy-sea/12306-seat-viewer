@@ -68,10 +68,23 @@
       min-width: 72px;
     }
 
+    #trainOptionList {
+      width: min(100%, 420px);
+      max-height: min(50vh, 320px);
+      margin-top: 4px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+    }
+
     #trainOptionList button {
       display: block;
       width: 100%;
+      min-height: 44px;
+      padding: 6px 8px;
+      white-space: normal;
       text-align: left;
+      overflow-wrap: anywhere;
     }
   </style>
 </head>
@@ -83,13 +96,13 @@
       <label>出行日期 <input id="dateInput" type="date"></label>
     </p>
 
-    <p>
+    <div>
       <label>
         车次号
-        <input id="trainNumberInput" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" inputmode="latin" readonly placeholder="例如 G1、D3123">
+        <input id="trainNumberInput" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" inputmode="latin" readonly placeholder="例如 G1、D3123" aria-controls="trainOptionList" aria-expanded="false">
       </label>
-      <div id="trainOptionList" hidden></div>
-    </p>
+      <div id="trainOptionList" role="listbox" hidden></div>
+    </div>
 
     <div id="trainKeyboard" hidden>
       <p><button id="keyboardConfirm" type="button">确认</button></p>
@@ -122,7 +135,6 @@
     <section id="resultPanel" hidden>
       <h2 id="selectedTrain"></h2>
       <p id="selectedRoute"></p>
-      <p id="metaCodes"></p>
       <p id="galleryStatus"></p>
 
       <div id="seatGallery"></div>
@@ -144,7 +156,6 @@
     const resultPanel = document.getElementById("resultPanel");
     const selectedTrain = document.getElementById("selectedTrain");
     const selectedRoute = document.getElementById("selectedRoute");
-    const metaCodes = document.getElementById("metaCodes");
     const galleryStatus = document.getElementById("galleryStatus");
     const seatGallery = document.getElementById("seatGallery");
 
@@ -154,7 +165,6 @@
     let searchInFlightPromise = null;
     let selectedItem = null;
     let searchResults = [];
-    let searchResultsKeyword = "";
     const useCustomKeyboard = window.matchMedia("(pointer: coarse)").matches;
 
     const formatLocalDate = (date) => {
@@ -195,8 +205,8 @@
     const clearSuggestions = () => {
       trainOptionList.innerHTML = "";
       trainOptionList.hidden = true;
+      trainNumberInput.setAttribute("aria-expanded", "false");
       searchResults = [];
-      searchResultsKeyword = "";
     };
 
     const dedupeByTrainCode = (items) => {
@@ -269,10 +279,6 @@
       trainKeyboard.hidden = false;
     };
 
-    const hideTrainKeyboard = () => {
-      trainKeyboard.hidden = true;
-    };
-
     const updateTrainInput = (value) => {
       trainNumberInput.value = normalizeTrainNumber(value);
       clearSuggestions();
@@ -289,25 +295,24 @@
 
     const renderSuggestions = (items) => {
       searchResults = items;
-      searchResultsKeyword = getKeyword().toUpperCase();
+      if (items.length === 1) {
+        const item = items[0];
+        trainNumberInput.value = item.station_train_code;
+        trainOptionList.innerHTML = "";
+        trainOptionList.hidden = true;
+        trainNumberInput.setAttribute("aria-expanded", "false");
+        selectTrain(item);
+        return;
+      }
       trainOptionList.innerHTML = items
         .map((item, index) => {
           const route = `${item.from_station || ""} -> ${item.to_station || ""}`;
           const label = `${item.station_train_code} ${route}`;
-          return `<button type="button" data-index="${index}">${escapeHtml(label)}</button>`;
+          return `<button type="button" role="option" data-index="${index}">${escapeHtml(label)}</button>`;
         })
         .join("");
-      if (!useCustomKeyboard) {
-        trainOptionList.hidden = !items.length;
-      }
-    };
-
-    const showTrainOptions = () => {
-      if (!searchResults.length || searchResultsKeyword !== getKeyword().toUpperCase()) {
-        setStatus("没有匹配车次");
-        return;
-      }
-      trainOptionList.hidden = false;
+      trainOptionList.hidden = !items.length;
+      trainNumberInput.setAttribute("aria-expanded", String(items.length > 0));
     };
 
     const fetchTrainMeta = async (trainNo, date) => {
@@ -334,7 +339,6 @@
       resultPanel.hidden = false;
       selectedTrain.textContent = item.station_train_code;
       selectedRoute.textContent = `${item.from_station || ""} -> ${item.to_station || ""}`;
-      metaCodes.innerHTML = "";
       seatGallery.innerHTML = "";
       galleryStatus.textContent = "正在加载车辆信息和座位图...";
 
@@ -342,18 +346,11 @@
         const codes = await fetchTrainMeta(item.train_no, dateInput.value);
         const detailTrainCode = codes.find((code) => code === item.station_train_code) || codes[0] || item.station_train_code;
         const pics = await fetchSeatPics(detailTrainCode, dateInput.value);
-        renderMetaCodes(codes);
         renderSeatPics(pics);
         galleryStatus.textContent = pics.length ? `共 ${pics.length} 张座位图` : "未找到座位图";
       } catch {
         galleryStatus.textContent = "加载失败，请稍后重试";
       }
-    };
-
-    const renderMetaCodes = (codes) => {
-      metaCodes.innerHTML = codes
-        .map((code) => `<span>${escapeHtml(code)}</span>`)
-        .join("");
     };
 
     const renderSeatPics = (pics) => {
@@ -399,6 +396,7 @@
       if (!item) return;
       trainNumberInput.value = item.station_train_code;
       trainOptionList.hidden = true;
+      trainNumberInput.setAttribute("aria-expanded", "false");
       selectTrain(item);
     });
     trainKeyboard.addEventListener("click", (event) => {
@@ -414,23 +412,21 @@
       }
     });
     keyboardConfirm.addEventListener("click", async () => {
-      hideTrainKeyboard();
-      if (searchResults.length && searchResultsKeyword === getKeyword().toUpperCase()) {
-        showTrainOptions();
-        return;
-      }
+      trainKeyboard.hidden = true;
       if (searchTimer) {
         clearTimeout(searchTimer);
         searchTimer = null;
+        await searchTrains();
       }
-      await searchTrains();
-      showTrainOptions();
     });
     dateInput.addEventListener("change", () => {
       if (dateInput.value < today) {
         dateInput.value = today;
       }
-      if (selectedItem) selectTrain(selectedItem);
+      if (selectedItem) {
+        selectTrain(selectedItem);
+        return;
+      }
       scheduleSearch();
     });
   </script>
