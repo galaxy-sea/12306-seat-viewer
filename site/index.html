@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>12306 动车座位图</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: sans-serif;
+    }
+
+    main {
+      width: min(100%, 960px);
+      margin: 0 auto;
+      padding: 16px;
+    }
+
+    input,
+    select,
+    button {
+      font: inherit;
+    }
+
+    input,
+    select {
+      max-width: 100%;
+    }
+
+    img {
+      max-width: 100%;
+      height: auto;
+    }
+
+    #trainKeyboard {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      width: 100vw;
+      max-width: 100vw;
+      background: #fff;
+    }
+
+    #trainKeyboard p {
+      margin: 0;
+      text-align: right;
+    }
+
+    #trainKeyboard > div {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      width: 100%;
+    }
+
+    #trainKeyboard button {
+      width: 100%;
+      min-height: 46px;
+    }
+
+    #keyboardConfirm {
+      width: auto;
+      min-width: 72px;
+    }
+
+    #trainOptionList button {
+      display: block;
+      width: 100%;
+      text-align: left;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>12306 动车座位图</h1>
+
+    <p>
+      <label>出行日期 <input id="dateInput" type="date"></label>
+    </p>
+
+    <p>
+      <label>
+        车次号
+        <input id="trainNumberInput" type="text" autocomplete="off" inputmode="none" readonly placeholder="例如 G1、D3123">
+      </label>
+      <div id="trainOptionList" hidden></div>
+    </p>
+
+    <div id="trainKeyboard" hidden>
+      <p><button id="keyboardConfirm" type="button">确认</button></p>
+      <div>
+        <button type="button" data-key="G">G</button>
+        <button type="button" data-key="D">D</button>
+        <button type="button" data-key="1">1</button>
+        <button type="button" data-key="2">2</button>
+        <button type="button" data-key="3">3</button>
+        <button type="button" data-key="C">C</button>
+        <button type="button" data-key="K">K</button>
+        <button type="button" data-key="4">4</button>
+        <button type="button" data-key="5">5</button>
+        <button type="button" data-key="6">6</button>
+        <button type="button" data-key="L">L</button>
+        <button type="button" data-key="T">T</button>
+        <button type="button" data-key="7">7</button>
+        <button type="button" data-key="8">8</button>
+        <button type="button" data-key="9">9</button>
+        <button type="button" data-key="Z">Z</button>
+        <button type="button" data-key="Y">Y</button>
+        <button type="button" data-key="S">S</button>
+        <button type="button" data-key="0">0</button>
+        <button type="button" data-action="backspace">⌫</button>
+      </div>
+    </div>
+
+    <p id="statusText">输入车次号后开始查询</p>
+
+    <section id="resultPanel" hidden>
+      <h2 id="selectedTrain"></h2>
+      <p id="selectedRoute"></p>
+      <p id="metaCodes"></p>
+      <p id="galleryStatus"></p>
+
+      <div id="seatGallery"></div>
+    </section>
+  </main>
+
+  <script>
+    const searchEndpoint = "https://search.12306.cn/search/v1/train/search";
+    const metaEndpoint = "https://kyfw.12306.cn/otn/queryTrainInfo/query";
+    const detailEndpoint = "https://kyfw.12306.cn/wxxcx/openplatform-inner/miniprogram/wifiapps/appFrontEnd/v2/lounge/open-smooth-common/trainStyleBatch/getCarDetail";
+    const imagePrefix = "https://wifi.12306.cn/resourcecenter/cateringimages/";
+
+    const dateInput = document.getElementById("dateInput");
+    const trainNumberInput = document.getElementById("trainNumberInput");
+    const trainOptionList = document.getElementById("trainOptionList");
+    const trainKeyboard = document.getElementById("trainKeyboard");
+    const keyboardConfirm = document.getElementById("keyboardConfirm");
+    const statusText = document.getElementById("statusText");
+    const resultPanel = document.getElementById("resultPanel");
+    const selectedTrain = document.getElementById("selectedTrain");
+    const selectedRoute = document.getElementById("selectedRoute");
+    const metaCodes = document.getElementById("metaCodes");
+    const galleryStatus = document.getElementById("galleryStatus");
+    const seatGallery = document.getElementById("seatGallery");
+
+    let searchTimer = null;
+    let searchAbort = null;
+    let selectedItem = null;
+    let searchResults = [];
+    let searchResultsKeyword = "";
+    const useCustomKeyboard = window.matchMedia("(pointer: coarse)").matches;
+
+    const formatLocalDate = (date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    };
+
+    const toApiDate = (value) => value.replace(/-/g, "");
+
+    const escapeHtml = (value) =>
+      String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+
+    const getKeyword = () => {
+      return trainNumberInput.value.trim();
+    };
+
+    const setStatus = (text) => {
+      statusText.textContent = text;
+    };
+
+    const openDatePicker = () => {
+      if (typeof dateInput.showPicker === "function") {
+        dateInput.showPicker();
+      }
+    };
+
+    const clearSuggestions = () => {
+      trainOptionList.innerHTML = "";
+      trainOptionList.hidden = true;
+      searchResults = [];
+      searchResultsKeyword = "";
+    };
+
+    const dedupeByTrainCode = (items) => {
+      const seen = new Set();
+      return items.filter((item) => {
+        const code = item.station_train_code;
+        if (!code || seen.has(code)) return false;
+        seen.add(code);
+        return true;
+      });
+    };
+
+    const searchTrains = async () => {
+      const keyword = getKeyword();
+      const date = dateInput.value;
+      selectedItem = null;
+      resultPanel.hidden = true;
+      clearSuggestions();
+
+      if (!keyword) {
+        setStatus("输入车次号后开始查询");
+        return [];
+      }
+
+      if (searchAbort) searchAbort.abort();
+      searchAbort = new AbortController();
+
+      setStatus("正在查询车次...");
+      const url = `${searchEndpoint}?keyword=${encodeURIComponent(keyword)}&date=${encodeURIComponent(toApiDate(date))}`;
+
+      try {
+        const response = await fetch(url, { signal: searchAbort.signal });
+        if (!response.ok) throw new Error("Search failed");
+        const data = await response.json();
+        const results = dedupeByTrainCode(Array.isArray(data?.data) ? data.data : []);
+        renderSuggestions(results);
+        setStatus(results.length ? "" : "没有匹配车次");
+        return results;
+      } catch (error) {
+        if (error.name === "AbortError") return [];
+        setStatus("查询失败，请稍后重试");
+        return [];
+      }
+    };
+
+    const scheduleSearch = () => {
+      if (searchTimer) clearTimeout(searchTimer);
+      searchTimer = setTimeout(searchTrains, 300);
+    };
+
+    const showTrainKeyboard = () => {
+      if (!useCustomKeyboard) return;
+      trainNumberInput.readOnly = true;
+      trainKeyboard.hidden = false;
+    };
+
+    const hideTrainKeyboard = () => {
+      trainKeyboard.hidden = true;
+    };
+
+    const updateTrainInput = (value) => {
+      trainNumberInput.value = value;
+      clearSuggestions();
+      scheduleSearch();
+    };
+
+    const appendTrainKey = (key) => {
+      updateTrainInput(`${trainNumberInput.value}${key}`.toUpperCase());
+    };
+
+    const backspaceTrainKey = () => {
+      updateTrainInput(trainNumberInput.value.slice(0, -1));
+    };
+
+    const renderSuggestions = (items) => {
+      searchResults = items;
+      searchResultsKeyword = getKeyword().toUpperCase();
+      trainOptionList.innerHTML = items
+        .map((item, index) => {
+          const route = `${item.from_station || ""} -> ${item.to_station || ""}`;
+          const label = `${item.station_train_code} ${route}`;
+          return `<button type="button" data-index="${index}">${escapeHtml(label)}</button>`;
+        })
+        .join("");
+      if (!useCustomKeyboard) {
+        trainOptionList.hidden = !items.length;
+      }
+    };
+
+    const selectMatchedTrain = () => {
+      const value = trainNumberInput.value.trim().toUpperCase();
+      const item = searchResults.find((result) => result.station_train_code?.toUpperCase() === value);
+      if (item && selectedItem?.station_train_code !== item.station_train_code) {
+        selectTrain(item);
+      }
+    };
+
+    const showTrainOptions = () => {
+      if (!searchResults.length || searchResultsKeyword !== getKeyword().toUpperCase()) {
+        setStatus("没有匹配车次");
+        return;
+      }
+      trainOptionList.hidden = false;
+    };
+
+    const fetchTrainMeta = async (trainNo, date) => {
+      const url = `${metaEndpoint}?leftTicketDTO.train_no=${encodeURIComponent(trainNo)}&leftTicketDTO.train_date=${encodeURIComponent(date)}&rand_code=`;
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("Meta failed");
+      const data = await response.json();
+      const rows = Array.isArray(data?.data?.data) ? data.data.data : [];
+      return Array.from(new Set(rows.map((row) => row.station_train_code).filter(Boolean)));
+    };
+
+    const fetchSeatPics = async (trainNo, date) => {
+      const url = `${detailEndpoint}?carCode=&trainCode=${encodeURIComponent(trainNo)}&runningDay=${encodeURIComponent(toApiDate(date))}&reqType=form`;
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("Seat detail failed");
+      const data = await response.json();
+      return Array.isArray(data?.content?.data?.coachDetailPicList)
+        ? data.content.data.coachDetailPicList
+        : [];
+    };
+
+    const selectTrain = async (item) => {
+      selectedItem = item;
+      resultPanel.hidden = false;
+      selectedTrain.textContent = item.station_train_code;
+      selectedRoute.textContent = `${item.from_station || ""} -> ${item.to_station || ""}`;
+      metaCodes.innerHTML = "";
+      seatGallery.innerHTML = "";
+      galleryStatus.textContent = "正在加载车辆信息和座位图...";
+
+      try {
+        const [codes, pics] = await Promise.all([
+          fetchTrainMeta(item.train_no, dateInput.value),
+          fetchSeatPics(item.train_no, dateInput.value)
+        ]);
+        renderMetaCodes(codes);
+        renderSeatPics(pics);
+        galleryStatus.textContent = pics.length ? `共 ${pics.length} 张座位图` : "未找到座位图";
+      } catch {
+        galleryStatus.textContent = "加载失败，请稍后重试";
+      }
+    };
+
+    const renderMetaCodes = (codes) => {
+      metaCodes.innerHTML = codes
+        .map((code) => `<span>${escapeHtml(code)}</span>`)
+        .join("");
+    };
+
+    const renderSeatPics = (pics) => {
+      const sorted = pics.slice().sort((a, b) => (a?.picOrder || 0) - (b?.picOrder || 0));
+      seatGallery.innerHTML = sorted
+        .map((pic) => {
+          const url = pic?.pictureUrl?.startsWith("http")
+            ? pic.pictureUrl
+            : `${imagePrefix}${pic?.pictureUrl || ""}`;
+          const name = (pic?.pictureName || "座位图").split("#")[0] || "座位图";
+          return `
+            <figure>
+              <img src="${escapeHtml(url)}" alt="${escapeHtml(name)}" loading="lazy">
+              <figcaption>${escapeHtml(name)}</figcaption>
+            </figure>
+          `;
+        })
+        .join("");
+    };
+
+    const today = formatLocalDate(new Date());
+    dateInput.min = today;
+    dateInput.value = today;
+    clearSuggestions();
+    if (!useCustomKeyboard) {
+      trainNumberInput.removeAttribute("readonly");
+    }
+    dateInput.addEventListener("click", openDatePicker);
+    trainNumberInput.addEventListener("click", showTrainKeyboard);
+    trainNumberInput.addEventListener("focus", showTrainKeyboard);
+    trainNumberInput.addEventListener("input", () => {
+      if (!useCustomKeyboard) scheduleSearch();
+    });
+    trainNumberInput.addEventListener("change", selectMatchedTrain);
+    trainOptionList.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-index]");
+      if (!button) return;
+      const item = searchResults[Number(button.dataset.index)];
+      if (!item) return;
+      trainNumberInput.value = item.station_train_code;
+      trainOptionList.hidden = true;
+      selectTrain(item);
+    });
+    trainKeyboard.addEventListener("click", (event) => {
+      if (!useCustomKeyboard) return;
+      const button = event.target.closest("button");
+      if (!button) return;
+      if (button.dataset.key) {
+        appendTrainKey(button.dataset.key);
+        return;
+      }
+      if (button.dataset.action === "backspace") {
+        backspaceTrainKey();
+      }
+    });
+    keyboardConfirm.addEventListener("click", async () => {
+      hideTrainKeyboard();
+      if (searchResults.length && searchResultsKeyword === getKeyword().toUpperCase()) {
+        showTrainOptions();
+        return;
+      }
+      if (searchTimer) {
+        clearTimeout(searchTimer);
+        searchTimer = null;
+      }
+      await searchTrains();
+      showTrainOptions();
+    });
+    dateInput.addEventListener("change", () => {
+      if (dateInput.value < today) {
+        dateInput.value = today;
+      }
+      if (selectedItem) selectTrain(selectedItem);
+      scheduleSearch();
+    });
+  </script>
+</body>
+</html>
